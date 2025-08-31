@@ -33,12 +33,14 @@ struct entry_t {
 typedef struct {
    struct entry_t **buckets;
    size_t size;
-} hashmap_t;
+} chash_t;
 
-hashmap_t *create_hashmap(size_t size)
+chash_t *create_hashmap(size_t size)
 {
-   hashmap_t *ht = malloc(sizeof(hashmap_t));
+   chash_t *ht = malloc(sizeof(chash_t));
    ht->buckets = calloc(size, sizeof(struct entry_t *));
    ht->size = size;
    return ht;
 }
+
+

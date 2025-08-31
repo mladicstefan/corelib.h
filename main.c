@@ -1,5 +1,5 @@
+#include "chash.h"
 
-#include "hashmap.h"
 int main(){
-    hashmap_t *hashmap = create_hashmap(12);
+    chash_t *hashmap = create_hashmap(12);
 }
