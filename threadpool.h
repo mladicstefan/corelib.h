@@ -96,3 +96,21 @@ threadpool_t *cpool_create(int thread_count, int queue_size)
     }
     return NULL;
 }
+
+int threadpool_free(threadpool_t *pool)
+{
+    if(pool == NULL || pool->started < 0){
+        return -1;
+    }
+
+    if (pool->threads){
+        free(pool->threads);
+        free(pool->queue);
+
+        pthread_mutex_lock(&(pool->lock));
+        pthread_mutex_destroy(&(pool->lock));
+        pthread_cond_destroy(&(pool->notify));
+    }
+    free(pool);
+    return 0;
+}
