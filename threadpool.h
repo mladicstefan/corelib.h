@@ -42,11 +42,11 @@ typedef struct {
     int tail;
 } threadpool_t;
 
-int threadpool_free(threadpool_t *pool);
+static inline int threadpool_free(threadpool_t *pool);
 
-static void *threadpool_thread(void *threadpool);
+static inline void *threadpool_thread(void *threadpool);
 
-threadpool_t *cpool_create(int thread_count, int queue_size)
+static inline threadpool_t *cpool_create(int thread_count, int queue_size)
 {
     threadpool_t *pool;
 
@@ -76,10 +76,12 @@ threadpool_t *cpool_create(int thread_count, int queue_size)
     }
 
     for (int i = 0; i < thread_count; i++){
-        // todo: implement lol
-        // if (pthread_create(&(pool->threads[i], NULL,threadpool_thread, void* pool)) )
-        if (1){
-            // DONT FORGET TO FREE EXACTLY HREE!!! ON THIS LINE!!!!
+        if(pthread_create(&(pool->threads[i]), NULL,
+                          threadpool_thread, (void*)pool) != 0) {
+            // threadpool_destroy(pool, 0);
+            if(pool){
+                threadpool_free(pool);
+            }
             return NULL;
         }
         pool->thread_count++;
@@ -95,7 +97,7 @@ threadpool_t *cpool_create(int thread_count, int queue_size)
     return NULL;
 }
 
-int threadpool_free(threadpool_t *pool)
+static inline int threadpool_free(threadpool_t *pool)
 {
     if(pool == NULL || pool->started < 0){
         return -1;
@@ -113,7 +115,7 @@ int threadpool_free(threadpool_t *pool)
     return 0;
 }
 
-int threadpool_add(threadpool_t *pool,void (*function)(void *), void* argument)
+static inline int threadpool_add(threadpool_t *pool,void (*function)(void *), void* argument)
 {
     int next;
 
@@ -147,6 +149,41 @@ int threadpool_add(threadpool_t *pool,void (*function)(void *), void* argument)
     if(pthread_mutex_unlock(&(pool->mutex)) != 0){
         goto cleanup;
     }
+    return 0;
+
     cleanup:
-    //figure this out
+    return -1;
+}
+
+static inline void *threadpool_thread(void * threadpool)
+{
+    threadpool_t *pool = (threadpool_t*) threadpool;
+    cpool_task_t task;
+
+    for (;;){
+        pthread_mutex_lock(&(pool->mutex));
+
+        while((pool->pending_tasks) && (!pool->shutdown)){
+            pthread_cond_wait(&(pool->notify), &(pool->mutex));
+        }
+        //todo: add shutdown enum
+
+        if (pool->pending_tasks == 0){
+            break;
+        }
+
+        task.function = pool->queue[pool->head].function;
+        task.argument = pool->queue[pool->head].argument;
+
+        pool->head = (pool->head + 1) % pool->queue_size;
+        pool->pending_tasks -= 1;
+        pthread_mutex_unlock(&(pool->mutex));
+
+        (*(task.function))(task.argument);
+    }
+
+    pool->started--;
+    pthread_mutex_unlock(&(pool->mutex));
+    pthread_exit(NULL);
+    return(NULL);
 }
