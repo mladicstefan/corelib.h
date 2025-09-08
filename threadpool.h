@@ -1,189 +1,89 @@
 #pragma once
-
 #ifndef THREADPOOL_H
 #define THREADPOOL_H
-#endif
+#include <pthread.h>
+#include <stdbool.h>
 
 #define MAX_THREADS 64
+// 2^16 ensures cache-friendly alignment 
 #define MAX_QUEUE 65536
 
-#include <pthread.h>
-#include <unistd.h>
-#include <stdlib.h>
+/**
+* task_t - Work unit for thread queue
+* @task: Function pointer to execute the work
+* @argument: Generic argument passed to the task function
+* @cleanup: Optional cleanup function for argument memory management
+* 
+* NOTE: For multiple arguments, pack them into a struct and allocate on heap
+* for memory safety across thread boundaries. Use cleanup to free resources.
+*/
+typedef struct {
+   void (*task)(void *);
+   void *argument;
+   void (*cleanup)(void *);
+} task_t;
 
 /**
- * Task struct
- * Function is a generic function pointer to be performed by the thread
- * Argument is generic pointer to the Argument passed into the function
- */
+* task_queue_t - Thread-safe circular buffer for task storage
+* @tasks: Dynamic array of tasks (circular buffer)
+* @head: Index where consumers (workers) read from
+* @tail: Index where producers write to
+* @count: Current number of tasks in queue
+* @capacity: Maximum queue capacity
+* @mutex: Protects all queue operations
+* @not_full: Condition variable for producers waiting on queue space
+* @not_empty: Condition variable for consumers waiting on available tasks
+*/
 typedef struct {
-   void (*function)(void *);
-   void *argument;
-} cpool_task_t;
+   task_t *tasks;
+   size_t head, tail, count, capacity;
+   pthread_mutex_t mutex;
+   pthread_cond_t not_full;
+   pthread_cond_t not_empty;
+} task_queue_t;
 
-/*
- * Threadpool
- * mutex - mutex for queue
- * threads - pointer to all pthread_t's made
- * queue - functions to be done
- *
- */
+/**
+* threadpool_t - Main threadpool structure
+* @shutdown: Volatile flag for safe shutdown signaling across threads
+* @workers: Array of worker thread handles
+* @thread_count: Number of active worker threads
+* @queue: Pointer to the shared task queue
+*/
 typedef struct {
-    pthread_mutex_t mutex;
-    pthread_t *threads;
-    pthread_cond_t notify;
-    cpool_task_t *queue;
-    int thread_count;
-    int queue_size;
-    int pending_tasks;
-    int started;
-    int shutdown;
-    int head;
-    int tail;
+   volatile bool shutdown;
+   pthread_t *workers;
+   size_t thread_count;
+   task_queue_t *queue;
 } threadpool_t;
 
-static inline int threadpool_free(threadpool_t *pool);
+/**
+* threadpool_create - Initialize a new threadpool
+* @thread_count: Number of worker threads to spawn
+* @queue_size: Maximum number of pending tasks in queue
+* 
+* Returns: Pointer to threadpool on success, NULL on failure
+* NOTE: Validates bounds against MAX_THREADS and MAX_QUEUE
+*/
+threadpool_t *threadpool_create(size_t thread_count, size_t queue_size);
 
-static inline void *threadpool_thread(void *threadpool);
+/**
+* threadpool_add - Submit work to the threadpool
+* @pool: Target threadpool
+* @task: Task structure containing function, args, and cleanup
+* 
+* Returns: 0 on success, error code on failure
+* NOTE: May block if queue is full (depends on implementation)
+*/
+int threadpool_add(threadpool_t *pool, task_t *task);
 
-static inline threadpool_t *cpool_create(int thread_count, int queue_size)
-{
-    threadpool_t *pool;
+/**
+* threadpool_destroy - Shutdown and cleanup threadpool
+* @pool: Threadpool to destroy
+* @graceful: If true, finish pending tasks; if false, immediate shutdown
+* 
+* Returns: 0 on success, error code on failure
+* NOTE: Blocks until all worker threads have joined
+*/
+int threadpool_destroy(threadpool_t *pool, bool graceful);
 
-    if(thread_count <= 0 || thread_count > MAX_THREADS || queue_size <= 0|| queue_size > MAX_QUEUE){
-        return NULL;
-    }
-
-    if ((pool = (threadpool_t*)malloc(sizeof(threadpool_t))) == NULL){
-        goto err;
-    }
-
-    pool->thread_count = 0;
-    pool->queue_size = queue_size;
-    pool->thread_count = thread_count;
-    pool->shutdown = pool->started = 0;
-
-    if ((pool->threads = (pthread_t *)malloc(sizeof(pthread_t) * thread_count)) == NULL){
-        goto err;
-    }
-    if ((pool->queue = (cpool_task_t *)malloc(sizeof(cpool_task_t) * queue_size)) == NULL){
-        goto err;
-    }
-    // Initialize mutex and conditional (efficient callback for awaiting threads)
-    if ((pthread_mutex_init(&pool->mutex, NULL) != 0) ||
-        (pthread_cond_init(&(pool->notify), NULL) !=0)){
-        goto err;
-    }
-
-    for (int i = 0; i < thread_count; i++){
-        if(pthread_create(&(pool->threads[i]), NULL,
-                          threadpool_thread, (void*)pool) != 0) {
-            // threadpool_destroy(pool, 0);
-            if(pool){
-                threadpool_free(pool);
-            }
-            return NULL;
-        }
-        pool->thread_count++;
-        pool->started++;
-    }
-
-    return pool;
-
-    err:
-    if (pool){
-        threadpool_free(pool);
-    }
-    return NULL;
-}
-
-static inline int threadpool_free(threadpool_t *pool)
-{
-    if(pool == NULL || pool->started < 0){
-        return -1;
-    }
-
-    if (pool->threads){
-        free(pool->threads);
-        free(pool->queue);
-
-        pthread_mutex_lock(&(pool->mutex));
-        pthread_mutex_destroy(&(pool->mutex));
-        pthread_cond_destroy(&(pool->notify));
-    }
-    free(pool);
-    return 0;
-}
-
-static inline int threadpool_add(threadpool_t *pool,void (*function)(void *), void* argument)
-{
-    int next;
-
-    if (pool == NULL || function == NULL){
-       return -1;
-    }
-
-    if (pthread_mutex_lock(&(pool->mutex)) != 0){
-        return -2;
-    }
-
-    next = (pool->tail +1) % pool->queue_size;
-
-    if (pool->pending_tasks == pool->queue_size){
-        goto cleanup;
-    }
-
-    if (pool->shutdown){
-        goto cleanup;
-    }
-
-    pool->queue[pool->tail].function = function;
-    pool->queue[pool->tail].argument= argument;
-    pool->tail = next;
-    pool->pending_tasks++;
-
-    if(pthread_cond_signal(&(pool->notify)) != 0){
-        goto cleanup;
-    }
-
-    if(pthread_mutex_unlock(&(pool->mutex)) != 0){
-        goto cleanup;
-    }
-    return 0;
-
-    cleanup:
-    return -1;
-}
-
-static inline void *threadpool_thread(void * threadpool)
-{
-    threadpool_t *pool = (threadpool_t*) threadpool;
-    cpool_task_t task;
-
-    for (;;){
-        pthread_mutex_lock(&(pool->mutex));
-
-        while((pool->pending_tasks) && (!pool->shutdown)){
-            pthread_cond_wait(&(pool->notify), &(pool->mutex));
-        }
-        //todo: add shutdown enum
-
-        if (pool->pending_tasks == 0){
-            break;
-        }
-
-        task.function = pool->queue[pool->head].function;
-        task.argument = pool->queue[pool->head].argument;
-
-        pool->head = (pool->head + 1) % pool->queue_size;
-        pool->pending_tasks -= 1;
-        pthread_mutex_unlock(&(pool->mutex));
-
-        (*(task.function))(task.argument);
-    }
-
-    pool->started--;
-    pthread_mutex_unlock(&(pool->mutex));
-    pthread_exit(NULL);
-    return(NULL);
-}
+#endif
