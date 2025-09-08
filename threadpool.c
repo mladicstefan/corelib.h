@@ -28,7 +28,7 @@ static task_queue_t *queue_create(size_t capacity) {
 
     queue->head = queue->tail = queue->count = 0;
     queue->capacity = capacity;
-    // three seperate checks cus calling pthread destroy funcs failed initalization can cause undefined behaviour
+
     if (pthread_mutex_init(&queue->mutex, NULL) != 0) {
         free(queue->tasks);
         free(queue);
@@ -47,7 +47,6 @@ static task_queue_t *queue_create(size_t capacity) {
         free(queue);
         return NULL;
     }
-
     return queue;
 }
 
@@ -128,3 +127,50 @@ static void *worker_thread(void *arg){
     } 
     pthread_exit(NULL);
 }
+
+threadpool_t *threadpool_create(size_t thread_count, size_t queue_size)
+{
+    if(thread_count <= 0 || thread_count > MAX_THREADS || queue_size <= 0 || queue_size > MAX_QUEUE) {
+        return NULL;
+    }
+    threadpool_t *pool;
+
+    if((pool = (threadpool_t *)malloc(sizeof(threadpool_t))) == NULL) {
+        goto err;
+    }
+
+    pool->thread_count = 0;
+    pool->shutdown = false;
+    task_queue_t *queue = queue_create(queue_size);
+    if (queue == NULL){
+        goto err;
+    }
+    pool->queue = queue;
+
+    pool->workers = malloc(sizeof(pthread_t) * thread_count);
+    if (!pool->workers) {
+        goto err;
+    }
+
+    for (int i = 0; i < thread_count; i++){
+        if (pthread_create(&pool->workers[i], NULL, worker_thread, pool) != 0) {
+            //if failed :(
+            pool->shutdown = true;
+            for (size_t j = 0; j < i; j++) {
+                pthread_join(pool->workers[j], NULL);
+            }
+            goto err;
+        }
+        pool->thread_count++;
+    }
+    return pool;
+
+  err:
+    if (pool) {
+        if (pool->workers) free(pool->workers);
+        if (pool->queue) queue_destroy(pool->queue);
+        free(pool);
+    }
+    return NULL;
+}
+
