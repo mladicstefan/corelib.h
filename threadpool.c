@@ -9,6 +9,10 @@ static inline bool queue_is_full(task_queue_t *queue);
 static void queue_destroy(task_queue_t *queue);
 static void *worker_thread(void *arg);
 
+typedef enum{
+    invalid_pool = -1,
+}pool_error_t;
+
 static task_queue_t *queue_create(size_t capacity) {
 
     if (capacity > MAX_QUEUE || capacity <= 0) {
@@ -174,3 +178,35 @@ threadpool_t *threadpool_create(size_t thread_count, size_t queue_size)
     return NULL;
 }
 
+int threadpool_add(threadpool_t *pool, const task_t *task){
+    if (!pool || !task) return invalid_pool;
+
+    return queue_push(pool->queue, *task);
+}
+
+int threadpool_destroy(threadpool_t *pool, bool graceful) {
+    if (!pool) return -1;
+    
+    pool->shutdown = true;
+    
+    if (!graceful) {
+        pthread_mutex_lock(&pool->queue->mutex);
+        pool->queue->count = 0;
+        pool->queue->head = pool->queue->tail = 0;
+        pthread_cond_broadcast(&pool->queue->not_empty);
+        pthread_mutex_unlock(&pool->queue->mutex);
+    } else {
+        pthread_mutex_lock(&pool->queue->mutex);
+        pthread_cond_broadcast(&pool->queue->not_empty);
+        pthread_mutex_unlock(&pool->queue->mutex);
+    }
+
+    for (size_t i = 0; i < pool->thread_count; i++) {
+        pthread_join(pool->workers[i], NULL);
+    }
+
+    free(pool->workers);
+    queue_destroy(pool->queue);
+    free(pool);
+    return 0;
+}

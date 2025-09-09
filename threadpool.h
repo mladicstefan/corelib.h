@@ -74,7 +74,7 @@ threadpool_t *threadpool_create(size_t thread_count, size_t queue_size);
 * Returns: 0 on success, error code on failure
 * NOTE: May block if queue is full (depends on implementation)
 */
-int threadpool_add(threadpool_t *pool, task_t *task);
+int threadpool_add(threadpool_t *pool, const task_t *task);
 
 /**
 * threadpool_destroy - Shutdown and cleanup threadpool
