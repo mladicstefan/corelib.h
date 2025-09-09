@@ -1,4 +1,4 @@
-<p align="center"><em>Simple C base-layer/em></p>
+<p align="center"><em>Simple C base-layer</em></p>
 <p align="center">
   <img src="https://img.shields.io/badge/C-17-blue?logo=c" />
   <img src="https://img.shields.io/badge/License-MIT-blue" />
