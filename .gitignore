@@ -1,0 +1,91 @@
+# Object files
+*.o
+*.ko
+*.obj
+*.elf
+
+# Linker output
+*.ilk
+*.map
+*.exp
+
+# Precompiled Headers
+*.gch
+*.pch
+
+# Libraries
+*.lib
+*.a
+*.la
+*.lo
+
+# Shared objects (inc. Windows DLLs)
+*.dll
+*.so
+*.so.*
+*.dylib
+
+# Executables
+*.exe
+*.out
+*.app
+*.i*86
+*.x86_64
+*.hex
+
+# Debug files
+*.dSYM/
+*.su
+*.idb
+*.pdb
+
+# Build directories
+build/
+bin/
+obj/
+.deps/
+.libs/
+
+# Autotools
+/autom4te.cache
+/aclocal.m4
+/compile
+/configure
+/depcomp
+/install-sh
+/ltmain.sh
+/missing
+/config.log
+/config.status
+/config.sub
+/config.guess
+Makefile.in
+Makefile
+
+# pkg-config files
+*.pc
+
+# CMake
+CMakeFiles/
+CMakeCache.txt
+cmake_install.cmake
+CPackConfig.cmake
+CPackSourceConfig.cmake
+
+# Core dumps
+core
+vgcore.*
+
+# Editor temp files
+*~
+*.swp
+*.swo
+.vscode/
+.idea/
+
+# Static analysis
+cppcheck-result.xml
+scan-build-*/
+
+# Valgrind
+*.valgrind
