@@ -4,6 +4,7 @@
 *.obj
 *.elf
 
+
 # Linker output
 *.ilk
 *.map
@@ -88,4 +89,4 @@ cppcheck-result.xml
 scan-build-*/
 
 # Valgrind
-*.valgrind
+*.valgrin
