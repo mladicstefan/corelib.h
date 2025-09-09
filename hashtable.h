@@ -21,26 +21,35 @@
  * OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
  * SOFTWARE.
  */
-#include <stdlib.h>
-#include <stdint.h>
 
-struct entry_t {
-   uint32_t key;
-   char *value;
-   struct entry_t *next;
-};
+#include <stdint.h>
+#include <stdlib.h>
+#include <stdbool.h>
 
 typedef struct {
-   struct entry_t **buckets;
-   size_t size;
-} chash_t;
+    void* key;
+    void* value;
+    uint32_t hash;
+    bool is_occupied;
+} entry_t;
 
-chash_t *create_hashmap(size_t size)
-{
-   chash_t *ht = malloc(sizeof(chash_t));
-   ht->buckets = calloc(size, sizeof(struct entry_t *));
-   ht->size = size;
-   return ht;
+typedef struct {
+    entry_t* entries;
+    size_t table_size;
+    size_t count;
+} hashtable_t;
+
+static inline uint32_t djb2_hash(void * key, size_t len);
+static inline uint32_t djb2_hash(void * key, size_t len){
+    uint32_t hash = 5381; //base for DJB2 hash
+    for (size_t i =0; i < len; i++){
+        hash = ((hash << 5) + hash) + ((uint8_t*)key)[i]; //multiply by 2^5th by shifting
+    }
+    return hash;
 }
 
+static inline size_t hash_to_index(void* key, size_t key_len,size_t table_size);
+static inline size_t hash_to_index(void* key, size_t key_len,size_t table_size){
+    return djb2_hash(key,key_len) % table_size;
+}
 
