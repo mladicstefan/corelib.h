@@ -6,6 +6,4 @@
 </p>
 <p align="center">Made with ❤️ and ☕</p>
 
-Threadpool is complete, but not documented yet.
-Hashtable is WIP.
 
